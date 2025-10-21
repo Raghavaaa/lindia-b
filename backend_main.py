@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+import os
 
 app = FastAPI(title="LegalIndia Backend", version="1.0.4")
 
@@ -74,7 +75,17 @@ async def research(query: dict):
         }
     
     try:
-        # Try to call the AI engine first
+        # Try to call DeepSeek API directly first
+        deepseek_result = await call_deepseek_directly(query_text)
+        if deepseek_result:
+            return {
+                "query": query_text,
+                "ai_response": deepseek_result,
+                "model_used": "DeepSeek API (Direct)",
+                "confidence": 0.95
+            }
+        
+        # Try to call the AI engine as fallback
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://lindia-ai-production.up.railway.app/inference",
@@ -101,6 +112,76 @@ async def research(query: dict):
     except Exception as e:
         # Fallback to dynamic research generation
         return await generate_dynamic_research(query_text, client_id)
+
+async def call_deepseek_directly(query: str) -> str:
+    """
+    Call DeepSeek API directly for legal research
+    """
+    try:
+        # Get DeepSeek API key from environment
+        deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not deepseek_api_key:
+            print("DEEPSEEK_API_KEY not found in environment")
+            return None
+        
+        # DeepSeek API endpoint
+        deepseek_url = "https://api.deepseek.com/v1/chat/completions"
+        
+        # Prepare the legal research prompt
+        legal_prompt = f"""You are an expert Indian legal research assistant. Provide comprehensive, accurate, and practical legal guidance for Indian law.
+
+For any legal query, include:
+1. Relevant Indian laws, acts, and sections
+2. Recent case law and precedents
+3. Practical steps and procedures
+4. Important considerations and warnings
+5. References to specific legal provisions
+
+Be specific, cite relevant laws, and provide actionable advice. Focus on Indian legal system, courts, and procedures.
+
+User query: {query}
+
+Please provide a detailed legal analysis with proper citations and practical recommendations."""
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                deepseek_url,
+                headers={
+                    "Authorization": f"Bearer {deepseek_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are an expert Indian legal research assistant specializing in comprehensive legal analysis."
+                        },
+                        {
+                            "role": "user",
+                            "content": legal_prompt
+                        }
+                    ],
+                    "max_tokens": 4000,
+                    "temperature": 0.3
+                },
+                timeout=60.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "choices" in data and len(data["choices"]) > 0:
+                    return data["choices"][0]["message"]["content"]
+                else:
+                    print(f"Unexpected DeepSeek response format: {data}")
+                    return None
+            else:
+                print(f"DeepSeek API error: {response.status_code} - {response.text}")
+                return None
+                
+    except Exception as e:
+        print(f"DeepSeek API call error: {str(e)}")
+        return None
 
 async def generate_dynamic_research(query: str, client_id: str) -> dict:
     """

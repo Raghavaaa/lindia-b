@@ -85,29 +85,32 @@ async def research(query: dict):
                 "confidence": 0.95
             }
         
-        # Try to call the AI engine as fallback
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://lindia-ai-production.up.railway.app/inference",
-                json={
-                    "query": query_text,
-                    "context": "Legal Research Assistant - Comprehensive Analysis",
-                    "tenant_id": client_id
-                },
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "query": query_text,
-                    "ai_response": data.get("answer", "No response"),
-                    "model_used": data.get("model", "AI Research Assistant"),
-                    "confidence": 0.9
-                }
-            else:
-                # Fallback to dynamic research generation
-                return await generate_dynamic_research(query_text, client_id)
+        # Try to call the AI engine as fallback (if available)
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://lindia-ai-production.up.railway.app/inference",
+                    json={
+                        "query": query_text,
+                        "context": "Legal Research Assistant - Comprehensive Analysis",
+                        "tenant_id": client_id
+                    },
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "query": query_text,
+                        "ai_response": data.get("answer", "No response"),
+                        "model_used": data.get("model", "AI Research Assistant"),
+                        "confidence": 0.9
+                    }
+        except Exception as e:
+            print(f"AI engine call failed: {str(e)}")
+        
+        # Fallback to dynamic research generation
+        return await generate_dynamic_research(query_text, client_id)
                 
     except Exception as e:
         # Fallback to dynamic research generation

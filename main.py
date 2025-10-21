@@ -26,22 +26,21 @@ async def junior(query: dict):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "https://lindia-ai-production.up.railway.app/inference",
+                "https://lindia-ai-production.up.railway.app/api/v1/research/",
                 json={
                     "query": query.get("query", ""),
-                    "context": "AI Legal Junior Assistant",
-                    "tenant_id": query.get("client_id", "demo")
+                    "client_id": query.get("client_id", "demo")
                 },
-                timeout=30.0
+                timeout=60.0
             )
             
             if response.status_code == 200:
                 data = response.json()
                 return {
                     "query": query.get("query", ""),
-                    "answer": data.get("answer", "No response"),
-                    "model_used": data.get("model", "AI Legal Junior"),
-                    "confidence": 0.9
+                    "answer": data.get("ai_response", "No response"),
+                    "model_used": data.get("model_used", "AI Legal Junior"),
+                    "confidence": data.get("confidence", 0.9)
                 }
             else:
                 return {
@@ -89,22 +88,21 @@ async def research(query: dict):
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "https://lindia-ai-production.up.railway.app/inference",
+                    "https://lindia-ai-production.up.railway.app/api/v1/research/",
                     json={
                         "query": query_text,
-                        "context": "Legal Research Assistant - Comprehensive Analysis",
-                        "tenant_id": client_id
+                        "client_id": client_id
                     },
-                    timeout=30.0
+                    timeout=60.0
                 )
                 
                 if response.status_code == 200:
                     data = response.json()
                     return {
                         "query": query_text,
-                        "ai_response": data.get("answer", "No response"),
-                        "model_used": data.get("model", "AI Research Assistant"),
-                        "confidence": 0.9
+                        "ai_response": data.get("ai_response", "No response"),
+                        "model_used": data.get("model_used", "AI Research Assistant"),
+                        "confidence": data.get("confidence", 0.9)
                     }
         except Exception as e:
             print(f"AI engine call failed: {str(e)}")

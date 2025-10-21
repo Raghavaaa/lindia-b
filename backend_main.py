@@ -75,13 +75,13 @@ async def research(query: dict):
         }
     
     try:
-        # Try to call DeepSeek API directly first
-        deepseek_result = await call_deepseek_directly(query_text)
+        # Try to call InLegalBERT → DeepSeek workflow first
+        deepseek_result = await call_deepseek_with_enhanced_query(query_text)
         if deepseek_result:
             return {
                 "query": query_text,
                 "ai_response": deepseek_result,
-                "model_used": "DeepSeek API (Direct)",
+                "model_used": "InLegalBERT + DeepSeek API",
                 "confidence": 0.95
             }
         
@@ -113,9 +113,64 @@ async def research(query: dict):
         # Fallback to dynamic research generation
         return await generate_dynamic_research(query_text, client_id)
 
-async def call_deepseek_directly(query: str) -> str:
+async def enhance_query_with_inlegalbert(query: str) -> str:
     """
-    Call DeepSeek API directly for legal research
+    Enhance query using InLegalBERT for better legal context
+    """
+    try:
+        # Get InLegalBERT API key from environment
+        inlegalbert_api_key = os.getenv("INLEGALBERT_API_KEY")
+        if not inlegalbert_api_key:
+            print("INLEGALBERT_API_KEY not found in environment")
+            return query  # Return original query if no API key
+        
+        # InLegalBERT API endpoint (Hugging Face)
+        inlegalbert_url = "https://api-inference.huggingface.co/models/law-ai/InLegalBERT"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                inlegalbert_url,
+                headers={
+                    "Authorization": f"Bearer {inlegalbert_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "inputs": query,
+                    "options": {"wait_for_model": True}
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Handle different response formats from InLegalBERT
+                enhanced_query = query  # Default to original
+                
+                if isinstance(data, list) and len(data) > 0:
+                    # Standard HF inference response
+                    first_result = data[0]
+                    if first_result and first_result.get("label"):
+                        enhanced_query = f"{query} - Enhanced by InLegalBERT: {first_result['label']}"
+                elif isinstance(data, dict):
+                    if data.get("generated_text"):
+                        enhanced_query = f"{query} - Enhanced: {data['generated_text']}"
+                    elif data.get("result"):
+                        enhanced_query = f"{query} - Enhanced: {data['result']}"
+                
+                print(f"InLegalBERT enhancement: {enhanced_query[:100]}...")
+                return enhanced_query
+            else:
+                print(f"InLegalBERT API error: {response.status_code}")
+                return query  # Return original query on error
+                
+    except Exception as e:
+        print(f"InLegalBERT API call error: {str(e)}")
+        return query  # Return original query on error
+
+async def call_deepseek_with_enhanced_query(query: str) -> str:
+    """
+    Call DeepSeek API with InLegalBERT enhanced query
     """
     try:
         # Get DeepSeek API key from environment
@@ -124,10 +179,15 @@ async def call_deepseek_directly(query: str) -> str:
             print("DEEPSEEK_API_KEY not found in environment")
             return None
         
-        # DeepSeek API endpoint
+        # Step 1: Enhance query with InLegalBERT
+        print("Step 1: Enhancing query with InLegalBERT...")
+        enhanced_query = await enhance_query_with_inlegalbert(query)
+        
+        # Step 2: Send enhanced query to DeepSeek
+        print("Step 2: Sending enhanced query to DeepSeek...")
         deepseek_url = "https://api.deepseek.com/v1/chat/completions"
         
-        # Prepare the legal research prompt
+        # Prepare the legal research prompt with enhanced query
         legal_prompt = f"""You are an expert Indian legal research assistant. Provide comprehensive, accurate, and practical legal guidance for Indian law.
 
 For any legal query, include:
@@ -139,7 +199,7 @@ For any legal query, include:
 
 Be specific, cite relevant laws, and provide actionable advice. Focus on Indian legal system, courts, and procedures.
 
-User query: {query}
+Enhanced Query (processed by InLegalBERT): {enhanced_query}
 
 Please provide a detailed legal analysis with proper citations and practical recommendations."""
 
@@ -155,7 +215,7 @@ Please provide a detailed legal analysis with proper citations and practical rec
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are an expert Indian legal research assistant specializing in comprehensive legal analysis."
+                            "content": "You are an expert Indian legal research assistant specializing in comprehensive legal analysis. You receive queries that have been enhanced by InLegalBERT for better legal context."
                         },
                         {
                             "role": "user",
@@ -171,7 +231,9 @@ Please provide a detailed legal analysis with proper citations and practical rec
             if response.status_code == 200:
                 data = response.json()
                 if "choices" in data and len(data["choices"]) > 0:
-                    return data["choices"][0]["message"]["content"]
+                    result = data["choices"][0]["message"]["content"]
+                    print("DeepSeek API: Successfully processed enhanced query")
+                    return result
                 else:
                     print(f"Unexpected DeepSeek response format: {data}")
                     return None

@@ -31,7 +31,7 @@ async def junior(query: dict):
                     "query": query.get("query", ""),
                     "client_id": query.get("client_id", "demo")
                 },
-                timeout=60.0
+                timeout=120.0
             )
             
             if response.status_code == 200:
@@ -93,7 +93,7 @@ async def research(query: dict):
                         "query": query_text,
                         "client_id": client_id
                     },
-                    timeout=60.0
+                    timeout=120.0
                 )
                 
                 if response.status_code == 200:
@@ -139,7 +139,7 @@ async def enhance_query_with_inlegalbert(query: str) -> str:
                     "inputs": query,
                     "options": {"wait_for_model": True}
                 },
-                timeout=30.0
+                timeout=120.0
             )
             
             if response.status_code == 200:
@@ -226,7 +226,7 @@ Please provide a detailed legal analysis with proper citations and practical rec
                     "max_tokens": 4000,
                     "temperature": 0.3
                 },
-                timeout=60.0
+                timeout=120.0
             )
             
             if response.status_code == 200:

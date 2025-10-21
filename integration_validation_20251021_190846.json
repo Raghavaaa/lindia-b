@@ -1,0 +1,63 @@
+{
+  "timestamp": "2025-10-21T19:08:45.629517",
+  "frontend": {
+    "overall": true,
+    "structure": {
+      "valid": true,
+      "components": 26
+    },
+    "api_integration": {
+      "valid": true,
+      "integrations": 0
+    },
+    "env_config": {
+      "valid": true,
+      "files": []
+    },
+    "summary": "26 components, 0 API integrations"
+  },
+  "ai_engine": {
+    "overall": false,
+    "health": {
+      "valid": false,
+      "status": 502
+    },
+    "inference": {
+      "valid": false,
+      "status": 502
+    },
+    "integration": {
+      "valid": true,
+      "patterns": [
+        "lindia-ai",
+        "/inference",
+        "AI Legal"
+      ]
+    },
+    "summary": "Endpoint: False, Models: 0"
+  },
+  "database": {
+    "overall": true,
+    "existence": {
+      "valid": true,
+      "size_kb": 48.0
+    },
+    "structure": {
+      "valid": true,
+      "tables": [
+        "uploads",
+        "alembic_version",
+        "clients"
+      ]
+    },
+    "migrations": {
+      "valid": true,
+      "count": 1
+    },
+    "models": {
+      "valid": true,
+      "count": 3
+    },
+    "summary": "Tables: 3, Connection: True"
+  }
+}

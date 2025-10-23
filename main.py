@@ -61,9 +61,12 @@ async def junior(query: dict):
 async def research(query: dict):
     """
     Dynamic legal research endpoint with InLegalBERT + DeepSeek integration
+    Accepts: query, client_id, char_limit (optional), tone (optional)
     """
     query_text = query.get("query", "").strip()
     client_id = query.get("client_id", "demo")
+    char_limit = query.get("char_limit", None)  # Target character count (e.g., 400 for 300-500)
+    tone = query.get("tone", None)  # Optional tone
     
     if not query_text:
         return {
@@ -75,13 +78,23 @@ async def research(query: dict):
     
     try:
         # Try to call InLegalBERT → DeepSeek workflow first
-        deepseek_result = await call_deepseek_with_enhanced_query(query_text)
+        import time
+        start_time = time.time()
+        
+        deepseek_result = await call_deepseek_with_enhanced_query(query_text, char_limit, tone)
+        
+        end_time = time.time()
+        total_time = round(end_time - start_time, 2)
+        
         if deepseek_result:
+            char_count = len(deepseek_result)
             return {
                 "query": query_text,
                 "ai_response": deepseek_result,
                 "model_used": "InLegalBERT + DeepSeek API",
-                "confidence": 0.95
+                "confidence": 0.95,
+                "character_count": char_count,
+                "processing_time_seconds": total_time
             }
         
         # Try to call the AI engine as fallback (if available)
@@ -169,9 +182,11 @@ async def enhance_query_with_inlegalbert(query: str) -> str:
         print(f"InLegalBERT API call error: {str(e)}")
         return query  # Return original query on error
 
-async def call_deepseek_with_enhanced_query(query: str) -> str:
+async def call_deepseek_with_enhanced_query(query: str, char_limit: int = None, tone: str = None) -> str:
     """
     Call DeepSeek API with InLegalBERT enhanced query
+    char_limit: STRICT character limit (e.g., 400 for 300-500 range)
+    tone: Tone of response
     """
     try:
         # Get DeepSeek API key from environment
@@ -182,29 +197,42 @@ async def call_deepseek_with_enhanced_query(query: str) -> str:
         
         # Step 1: Enhance query with InLegalBERT
         print("Step 1: Enhancing query with InLegalBERT...")
+        inlegalbert_start = __import__('time').time()
         enhanced_query = await enhance_query_with_inlegalbert(query)
+        inlegalbert_time = round(__import__('time').time() - inlegalbert_start, 2)
+        print(f"InLegalBERT processing time: {inlegalbert_time}s")
         
         # Step 2: Send enhanced query to DeepSeek
         print("Step 2: Sending enhanced query to DeepSeek...")
+        deepseek_start = __import__('time').time()
         deepseek_url = "https://api.deepseek.com/v1/chat/completions"
         
+        # Build character limit instruction (STRICT)
+        char_instruction = ""
+        if char_limit:
+            min_chars = max(char_limit - 100, 100)
+            max_chars = char_limit + 100
+            char_instruction = f"\n\n**CRITICAL REQUIREMENT**: Your ENTIRE response MUST be between {min_chars} and {max_chars} characters TOTAL. Count every character including spaces and punctuation. If you exceed this limit, your response will be rejected. Be ultra-concise while covering key points."
+        
+        # Build tone instruction
+        tone_instruction = ""
+        if tone:
+            if tone.lower() == "aggressive":
+                tone_instruction = "\n\n**TONE**: Use strong, urgent, assertive language. Emphasize immediate action required."
+            elif tone.lower() == "mild":
+                tone_instruction = "\n\n**TONE**: Use calm, reassuring, balanced language."
+        
         # Prepare the legal research prompt with enhanced query
-        legal_prompt = f"""You are an expert Indian legal research assistant. Provide comprehensive, accurate, and practical legal guidance for Indian law.
+        legal_prompt = f"""You are an expert Indian legal research assistant providing CONCISE legal guidance.{char_instruction}{tone_instruction}
 
-For any legal query, include:
-1. Relevant Indian laws, acts, and sections
-2. Recent case law and precedents
-3. Practical steps and procedures
-4. Important considerations and warnings
-5. References to specific legal provisions
+Enhanced Query (from InLegalBERT): {enhanced_query}
 
-Be specific, cite relevant laws, and provide actionable advice. Focus on Indian legal system, courts, and procedures.
-
-Enhanced Query (processed by InLegalBERT): {enhanced_query}
-
-Please provide a detailed legal analysis with proper citations and practical recommendations."""
+Provide: 1) Key laws/sections 2) Immediate action 3) Timeline. BE EXTREMELY BRIEF."""
 
         async with httpx.AsyncClient() as client:
+            # Adjust max_tokens based on character limit
+            max_tokens = 200 if char_limit and char_limit < 600 else 4000
+            
             response = await client.post(
                 deepseek_url,
                 headers={
@@ -216,14 +244,14 @@ Please provide a detailed legal analysis with proper citations and practical rec
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are an expert Indian legal research assistant specializing in comprehensive legal analysis. You receive queries that have been enhanced by InLegalBERT for better legal context."
+                            "content": "You are an expert Indian legal assistant providing ULTRA-CONCISE responses. Enhanced queries come from InLegalBERT."
                         },
                         {
                             "role": "user",
                             "content": legal_prompt
                         }
                     ],
-                    "max_tokens": 4000,
+                    "max_tokens": max_tokens,
                     "temperature": 0.3
                 },
                 timeout=120.0
@@ -231,9 +259,14 @@ Please provide a detailed legal analysis with proper citations and practical rec
             
             if response.status_code == 200:
                 data = response.json()
+                deepseek_time = round(__import__('time').time() - deepseek_start, 2)
+                print(f"DeepSeek processing time: {deepseek_time}s")
+                
                 if "choices" in data and len(data["choices"]) > 0:
                     result = data["choices"][0]["message"]["content"]
-                    print("DeepSeek API: Successfully processed enhanced query")
+                    char_count = len(result)
+                    print(f"DeepSeek API: Successfully processed enhanced query ({char_count} chars)")
+                    print(f"Total pipeline time: {inlegalbert_time + deepseek_time}s")
                     return result
                 else:
                     print(f"Unexpected DeepSeek response format: {data}")

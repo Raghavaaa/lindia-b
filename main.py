@@ -207,31 +207,26 @@ async def call_deepseek_with_enhanced_query(query: str, char_limit: int = None, 
         deepseek_start = __import__('time').time()
         deepseek_url = "https://api.deepseek.com/v1/chat/completions"
         
-        # Build character limit instruction (STRICT)
-        char_instruction = ""
-        if char_limit:
-            min_chars = max(char_limit - 100, 100)
-            max_chars = char_limit + 100
-            char_instruction = f"\n\n**CRITICAL REQUIREMENT**: Your ENTIRE response MUST be between {min_chars} and {max_chars} characters TOTAL. Count every character including spaces and punctuation. If you exceed this limit, your response will be rejected. Be ultra-concise while covering key points."
-        
         # Build tone instruction
         tone_instruction = ""
         if tone:
             if tone.lower() == "aggressive":
-                tone_instruction = "\n\n**TONE**: Use strong, urgent, assertive language. Emphasize immediate action required."
+                tone_instruction = " Use URGENT, STRONG language."
             elif tone.lower() == "mild":
-                tone_instruction = "\n\n**TONE**: Use calm, reassuring, balanced language."
+                tone_instruction = " Use calm, reassuring tone."
         
-        # Prepare the legal research prompt with enhanced query
-        legal_prompt = f"""You are an expert Indian legal research assistant providing CONCISE legal guidance.{char_instruction}{tone_instruction}
+        # Prepare concise legal research prompt
+        legal_prompt = f"""Indian legal brief: {enhanced_query}
 
-Enhanced Query (from InLegalBERT): {enhanced_query}
-
-Provide: 1) Key laws/sections 2) Immediate action 3) Timeline. BE EXTREMELY BRIEF."""
+Provide: 1) Key IPC/CrPC sections 2) Immediate action steps 3) Timeline.{tone_instruction} ULTRA-BRIEF."""
 
         async with httpx.AsyncClient() as client:
-            # Adjust max_tokens based on character limit
-            max_tokens = 200 if char_limit and char_limit < 600 else 4000
+            # Calculate max_tokens from character limit (approx 4 chars per token)
+            # For 300-500 chars, use ~75-125 tokens
+            if char_limit:
+                max_tokens = int(char_limit / 3.5)  # Conservative estimate
+            else:
+                max_tokens = 4000
             
             response = await client.post(
                 deepseek_url,
